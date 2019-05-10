@@ -30,7 +30,7 @@ IAM.prototype.create_users_table = function(cb) {
 			PRIMARY KEY ( account_id, username )
 		)
 	`, function(err,data) {
-		console.log("create table => ", err, data )
+		//console.log("create table => ", err, data )
 		setTimeout(function() {
 			if (typeof cb === "function") cb()
 		},3000)
@@ -118,6 +118,60 @@ IAM.prototype.createUser = function( params, cb ) {
 				created_at: created_at,
 			})
 		})
+
+}
+
+IAM.prototype.deleteUser = function( params, cb ) {
+	var $this = this;
+	if (typeof params.UserName !== "string")
+		return cb({ code: 'INVALID_USERNAME', message: 'Invalid UserName'})
+
+	var user;
+	async.waterfall([
+		// step1, get the user
+		function( cb) {
+			DynamoDB
+				.table('iam_users')
+				.where('account_id').eq( account_id )
+				.where('username').eq(params.UserName)
+				.consistent_read()
+				.get(function(err,dbuser) {
+					if (err)
+						return cb(err)
+					
+					if (!Object.keys(dbuser).length)
+						return cb({code: 'NoSuchEntity', message: 'The user with name ' + params.UserName + ' cannot be found.'})
+
+					user = dbuser;
+					cb()
+				})
+		},
+		
+		// step2, delete all its keys, than later reqrite this with transactions
+		function(cb) {
+			cb()
+		},
+		
+		// step3, actually delete the user
+		function(cb) {
+			DynamoDB
+				.table('iam_users')
+				.where('account_id').eq( account_id )
+				.where('username').eq(params.UserName)
+				.delete(function(err) {
+					if (err)
+						return cb(err)
+					
+					cb()
+				})
+		},
+		
+	], function(err) {
+		if (err)
+			return cb(err)
+
+		cb( null )
+	})
 
 }
 
